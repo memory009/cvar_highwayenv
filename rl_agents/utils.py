@@ -94,7 +94,7 @@ def bernoulli_kullback_leibler(p: float, q: float) -> float:
     :param q: parameter of the second Bernoulli distribution
     :return: KL(B(p) || B(q))
     """
-    kl1, kl2 = 0, np.infty
+    kl1, kl2 = 0, np.inf
     if p > 0:
         if q > 0:
             kl1 = p*np.log(p/q)

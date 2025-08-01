@@ -136,7 +136,7 @@ class DecisionNode(OLOPNode):
         super().__init__(parent, planner)
         self.depth = 0 if parent is None else parent.depth + 1
 
-        self.mu_lcb = -np.infty
+        self.mu_lcb = -np.inf
         """ Lower bound of the node mean reward. """
 
         if self.planner.config["upper_bound"]["type"] == "kullback-leibler":
@@ -149,7 +149,7 @@ class DecisionNode(OLOPNode):
         """ Lower bound on the node optimal reward-to-go """
         self.value_lower = 0
 
-        self.gap = -np.infty
+        self.gap = -np.inf
         """ Maximum possible gap from this node to its neighbours, based on their value confidence intervals """
 
     def get_child(self, action, state):
@@ -230,7 +230,7 @@ class DecisionNode(OLOPNode):
             For best arm identification: compute for each child how much the other actions are potentially better.
         """
         for child in self.children.values():
-            child.gap = -np.infty
+            child.gap = -np.inf
             for other in self.children.values():
                 if other is not child:
                     child.gap = max(child.gap, other.value_upper - child.value_lower)

@@ -39,13 +39,28 @@ def plot_values_histograms(value_network, targets, states_betas, actions, writer
 def plot_histograms(title, writer, epoch, labels, values):
     fig = plt.figure()
     for value, label in zip(values, labels):
-        sns.distplot(value, label=label)
+        # Use histplot instead of deprecated distplot
+        sns.histplot(value, label=label, kde=True, stat='density', alpha=0.7)
     plt.title(title)
     plt.legend(loc='upper right')
 
     fig.canvas.draw()
-    data = np.fromstring(fig.canvas.tostring_rgb(), dtype=np.uint8, sep='')
-    data = np.rollaxis(data.reshape(fig.canvas.get_width_height()[::-1] + (3,)), 2, 0)
+    # Fix for matplotlib API change - tostring_rgb() is deprecated
+    try:
+        # Try new API first (matplotlib >= 3.8)
+        buf = fig.canvas.buffer_rgba()
+        data = np.asarray(buf)[:, :, :3]  # Remove alpha channel to get RGB
+        data = np.rollaxis(data, 2, 0)  # Change from HWC to CHW format
+    except AttributeError:
+        # Fall back to older API
+        try:
+            data = np.fromstring(fig.canvas.tostring_rgb(), dtype=np.uint8, sep='')
+            data = np.rollaxis(data.reshape(fig.canvas.get_width_height()[::-1] + (3,)), 2, 0)
+        except AttributeError:
+            # Last resort - use tostring_argb if available
+            data = np.fromstring(fig.canvas.tostring_argb(), dtype=np.uint8, sep='')
+            data = data.reshape(fig.canvas.get_width_height()[::-1] + (4,))[:, :, 1:4]  # Remove alpha, keep RGB
+            data = np.rollaxis(data, 2, 0)
     writer.add_image(clean_tag(title), data, epoch)
     plt.close()
 
@@ -89,11 +104,46 @@ def plot_frontier(frontier, all_points, writer=None, epoch=0, title="", beta=Non
 
     # Figure export
     fig.canvas.draw()
-    data_str = fig.canvas.tostring_rgb()
+    # Fix for matplotlib API change - tostring_rgb() is deprecated
+    data_str = None  # Initialize data_str to avoid UnboundLocalError
     if writer:
-        data = np.fromstring(data_str, dtype=np.uint8, sep='')
-        data = np.rollaxis(data.reshape(fig.canvas.get_width_height()[::-1] + (3,)), 2, 0)
+        try:
+            # Try new API first (matplotlib >= 3.8)
+            buf = fig.canvas.buffer_rgba()
+            data = np.asarray(buf)[:, :, :3]  # Remove alpha channel to get RGB
+            data = np.rollaxis(data, 2, 0)  # Change from HWC to CHW format
+            # For new API, convert data back to bytes for compatibility
+            data_str = data.tobytes()
+        except AttributeError:
+            # Fall back to older API
+            try:
+                data_str = fig.canvas.tostring_rgb()
+                data = np.fromstring(data_str, dtype=np.uint8, sep='')
+                data = np.rollaxis(data.reshape(fig.canvas.get_width_height()[::-1] + (3,)), 2, 0)
+            except AttributeError:
+                # Last resort - use tostring_argb if available
+                data_str = fig.canvas.tostring_argb()
+                data = np.fromstring(data_str, dtype=np.uint8, sep='')
+                data = data.reshape(fig.canvas.get_width_height()[::-1] + (4,))[:, :, 1:4]  # Remove alpha, keep RGB
+                data = np.rollaxis(data, 2, 0)
         writer.add_image(clean_tag(title), data, epoch)
+    else:
+        # Even if no writer, we need to generate data_str for return value
+        try:
+            # Try new API first (matplotlib >= 3.8)
+            buf = fig.canvas.buffer_rgba()
+            data_array = np.asarray(buf)[:, :, :3]  # Remove alpha channel to get RGB
+            data_str = data_array.tobytes()
+        except AttributeError:
+            # Fall back to older API
+            try:
+                data_str = fig.canvas.tostring_rgb()
+            except AttributeError:
+                # Last resort - use tostring_argb if available
+                data_argb = fig.canvas.tostring_argb()
+                data_array = np.fromstring(data_argb, dtype=np.uint8, sep='')
+                data_array = data_array.reshape(fig.canvas.get_width_height()[::-1] + (4,))[:, :, 1:4]  # Remove alpha, keep RGB
+                data_str = data_array.tobytes()
     plt.close()
     return data_str, fig.canvas.get_width_height()
 

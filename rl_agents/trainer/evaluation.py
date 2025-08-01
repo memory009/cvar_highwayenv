@@ -7,7 +7,7 @@ from multiprocessing.pool import Pool
 from pathlib import Path
 import numpy as np
 from tensorboardX import SummaryWriter
-from gymnasium.wrappers import RecordVideo, RecordEpisodeStatistics, capped_cubic_video_schedule
+from gymnasium.wrappers import RecordVideo, RecordEpisodeStatistics
 
 import rl_agents.trainer.logger
 from rl_agents.agents.common.factory import load_environment, load_agent
@@ -19,6 +19,14 @@ from rl_agents.trainer.graphics import RewardViewer
 
 logger = logging.getLogger(__name__)
 
+def should_record_video(episode_id, freq=50):
+    """
+    Determine if a video should be recorded for the given episode
+    :param episode_id: current episode number
+    :param freq: frequency of video recording
+    :return: True if video should be recorded
+    """
+    return episode_id % freq == 0
 
 class Evaluation(object):
     """
@@ -78,7 +86,7 @@ class Evaluation(object):
         self.run_directory = self.directory / (run_directory or self.default_run_directory)
         self.wrapped_env = RecordVideo(env,
                                        self.run_directory,
-                                       episode_trigger=(None if self.display_env else lambda e: False))
+                                       episode_trigger=should_record_video if self.display_env else lambda e: False)
         try:
             self.wrapped_env.unwrapped.set_record_video_wrapper(self.wrapped_env)
         except AttributeError:
@@ -91,7 +99,7 @@ class Evaluation(object):
         self.write_logging()
         self.write_metadata()
         self.filtered_agent_stats = 0
-        self.best_agent_stats = -np.infty, 0
+        self.best_agent_stats = -np.inf, 0
 
         self.recover = recover
         if self.recover:
@@ -123,7 +131,6 @@ class Evaluation(object):
     def test(self):
         """
         Test the agent.
-
         If applicable, the agent model should be loaded before using the recover option.
         """
         self.training = False
@@ -162,35 +169,19 @@ class Evaluation(object):
 
     def step(self):
         """
-            Plan a sequence of actions according to the agent policy, and step the environment accordingly.
+            Step the environment
+            :return: the reward and terminal status
         """
-        # Query agent for actions sequence
-        actions = self.agent.plan(self.observation)
-        if not actions:
-            raise Exception("The agent did not plan any action")
+        actions = self.agent.act(self.observation)
 
-        # Forward the actions to the environment viewer
-        try:
-            self.env.unwrapped.viewer.set_agent_action_sequence(actions)
-        except AttributeError:
-            pass
-
-        # Step the environment
-        previous_observation, action = self.observation, actions[0]
-        transition = self.wrapped_env.step(action)
-        self.observation, reward, done, truncated, info = transition
-        terminal = done or truncated
-
-        # Call callback
-        if self.step_callback_fn is not None:
-            self.step_callback_fn(self.episode, self.wrapped_env, self.agent, transition, self.writer)
-
-        # Record the experience.
-        try:
-            self.agent.record(previous_observation, action, reward, self.observation, done, info)
-        except NotImplementedError:
-            pass
-
+        if not isinstance(actions, tuple):
+            actions = (actions,)
+        # Forward the actions to the environment
+        self.observation, reward, terminal, info = self.wrapped_env.step(actions[0])
+        
+        if self.step_callback_fn:
+            self.step_callback_fn(self.episode, self.env, self.agent, (self.observation, reward, terminal, info), self.writer)
+        
         return reward, terminal
 
     def run_batched_episodes(self):
@@ -200,7 +191,8 @@ class Evaluation(object):
             - update model
         """
         episode = 0
-        episode_duration = 14  # TODO: use a fixed number of samples instead
+        # 从环境配置中获取episode_duration，如果没有则使用默认值14
+        episode_duration = getattr(self.env, 'config', {}).get('duration', 14)
         batch_sizes = near_split(self.num_episodes * episode_duration, size_bins=self.agent.config["batch_size"])
         self.agent.reset()
         for batch, batch_size in enumerate(batch_sizes):
@@ -238,7 +230,7 @@ class Evaluation(object):
             # Fill memory
             for trajectory in trajectories:
                 if trajectory[-1].terminal:  # Check whether the episode was properly finished before logging
-                    self.after_all_episodes(episode, [transition.reward for transition in trajectory])
+                    self.after_all_episodes(episode, [transition.reward for transition in trajectory], 0)
                 episode += 1
                 [self.agent.record(*transition) for transition in trajectory]
 
@@ -249,9 +241,7 @@ class Evaluation(object):
     def collect_samples(environment_config, agent_config, count, start_time, seed, model_path, batch):
         """
             Collect interaction samples of an agent / environment pair.
-
             Note that the last episode may not terminate, when enough samples have been collected.
-
         :param dict environment_config: the environment configuration
         :param dict agent_config: the agent configuration
         :param int count: number of samples to collect
@@ -271,15 +261,15 @@ class Evaluation(object):
         agent.seed(seed)
         agent.set_time(start_time)
 
-        state = env.reset(seed=seed)
+        state = env.reset(seed=seed)[0]  # Get only the state, ignore info
         episodes = []
         trajectory = []
         for _ in range(count):
             action = agent.act(state)
-            next_state, reward, done, info = env.step(action)
-            trajectory.append(Transition(state, action, reward, next_state, done, info))
-            if done:
-                state = env.reset()
+            next_state, reward, done, truncated, info = env.step(action)
+            trajectory.append(Transition(state, action, reward, next_state, done or truncated, info))
+            if done or truncated:
+                state = env.reset(seed=seed)[0]  # Get only the state, ignore info
                 episodes.append(trajectory)
                 trajectory = []
             else:
@@ -335,7 +325,7 @@ class Evaluation(object):
     def after_some_episodes(self, episode, rewards,
                             best_increase=1.1,
                             episodes_window=50):
-        if capped_cubic_video_schedule(episode):
+        if should_record_video(episode):
             # Save the model
             if self.training:
                 self.save_agent_model(episode)
@@ -371,7 +361,7 @@ class Evaluation(object):
 
     def reset(self, seed=0):
         seed = self.sim_seed + seed if self.sim_seed is not None else None
-        self.observation, info = self.wrapped_env.reset()
+        self.observation, info = self.wrapped_env.reset(seed=seed)
         self.agent.seed(seed)  # Seed the agent with the main environment seed
         self.agent.reset()
 

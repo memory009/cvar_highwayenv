@@ -31,7 +31,7 @@ class IntervalFeedback(LinearFeedbackAgent):
             "discrete": False,
             "pole_placement": False,
             "ensure_stability": True,
-            "control_bound": np.infty
+            "control_bound": np.inf
         })
         return cfg
 

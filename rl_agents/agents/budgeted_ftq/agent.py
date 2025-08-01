@@ -86,7 +86,17 @@ class BFTQAgent(AbstractAgent):
         # TODO: Choose the initial budget for the next episode and not at each step
         self.beta = self.np_random.uniform() if self.training else self.config["beta"]
 
-        state = state.flatten()
+        # Handle new gymnasium API - ensure state is not a tuple
+        if isinstance(state, tuple):
+            state = state[0]  # Extract observation from (observation, info)
+        
+        # Ensure state can be flattened (convert to numpy array if needed)
+        if hasattr(state, 'flatten'):
+            state = state.flatten()
+        else:
+            import numpy as np
+            state = np.array(state).flatten()
+            
         self.previous_state, self.previous_beta = state, self.beta
         action, self.beta = self.exploration_policy.execute(state, self.beta)
         return action
@@ -99,8 +109,30 @@ class BFTQAgent(AbstractAgent):
         """
         if not self.training:
             return
+        
+        # Handle new gymnasium API - ensure states are not tuples
+        if isinstance(state, tuple):
+            state = state[0]  # Extract observation from (observation, info)
+        if isinstance(next_state, tuple):
+            next_state = next_state[0]  # Extract observation from (observation, info)
+        
+        # Ensure states can be flattened (convert to numpy array if needed)
+        if hasattr(state, 'flatten'):
+            state_flat = state.flatten()
+        else:
+            import numpy as np
+            state_flat = np.array(state).flatten()
+            
+        if hasattr(next_state, 'flatten'):
+            next_state_flat = next_state.flatten()
+        else:
+            import numpy as np
+            next_state_flat = np.array(next_state).flatten()
+        
         # Store transition to memory
-        self.bftq.push(state.flatten(), action, reward, next_state.flatten(), done, info["cost"])
+        # Use cost from info if available, otherwise use 0 as default cost
+        cost = info.get("cost", 0.0)
+        self.bftq.push(state_flat, action, reward, next_state_flat, done, cost)
 
     def update(self):
         """

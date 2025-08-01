@@ -109,7 +109,7 @@ class OLOPNode(Node):
         self.cumulative_reward = 0
         """ Sum of all rewards received at this node. """
 
-        self.mu_ucb = np.infty
+        self.mu_ucb = np.inf
         """ Upper bound of the node mean reward. """
 
         if self.planner.config["upper_bound"]["type"] == "kullback-leibler":

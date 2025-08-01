@@ -95,6 +95,21 @@ class ConstrainedEPCGraphics(RobustEPCGraphics):
             plt.savefig(save_to)
             plt.savefig(save_to.with_suffix(".png"))
         fig.canvas.draw()
-        data_str = fig.canvas.tostring_rgb()
+        # Fix for matplotlib API change - tostring_rgb() is deprecated
+        try:
+            # Try new API first (matplotlib >= 3.8)
+            buf = fig.canvas.buffer_rgba()
+            data_array = np.asarray(buf)[:, :, :3]  # Remove alpha channel to get RGB
+            data_str = data_array.tobytes()
+        except AttributeError:
+            # Fall back to older API
+            try:
+                data_str = fig.canvas.tostring_rgb()
+            except AttributeError:
+                # Last resort - use tostring_argb if available
+                data_argb = fig.canvas.tostring_argb()
+                data_array = np.fromstring(data_argb, dtype=np.uint8, sep='')
+                data_array = data_array.reshape(fig.canvas.get_width_height()[::-1] + (4,))[:, :, 1:4]  # Remove alpha, keep RGB
+                data_str = data_array.tobytes()
         plt.close()
         return data_str, fig.canvas.get_width_height()

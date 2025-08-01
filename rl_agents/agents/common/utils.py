@@ -43,7 +43,7 @@ def sample_simplex(coeff, bias, min_x, max_x, np_random=np.random):
         max_xi = (bias - dot_min) / coeff[index]
         min_xi = np.max([min_xi, min_x])
         max_xi = np.min([max_xi, max_x])
-        xi = min_xi + np_random.random_sample() * (max_xi - min_xi)
+        xi = min_xi + np_random.random() * (max_xi - min_xi)
         bias = bias - xi * coeff[index]
         x[index] = xi
         if len(remain_indexes) == 1:

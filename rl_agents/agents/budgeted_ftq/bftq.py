@@ -179,8 +179,15 @@ class BudgetedFittedQ(object):
         next_rewards_nf = torch.zeros(len(next_states_nf), device=self.device)
         next_costs_nf = torch.zeros(len(next_states_nf), device=self.device)
         for i, mix in enumerate(mixtures):
-            next_rewards_nf[i] = (1 - mix.probability_sup) * mix.inf.qr + mix.probability_sup * mix.sup.qr
-            next_costs_nf[i] = (1 - mix.probability_sup) * mix.inf.qc + mix.probability_sup * mix.sup.qc
+            # Convert numpy values to torch tensors with proper device
+            inf_qr = torch.tensor(mix.inf.qr, device=self.device, dtype=torch.float)
+            sup_qr = torch.tensor(mix.sup.qr, device=self.device, dtype=torch.float)
+            inf_qc = torch.tensor(mix.inf.qc, device=self.device, dtype=torch.float)
+            sup_qc = torch.tensor(mix.sup.qc, device=self.device, dtype=torch.float)
+            prob_sup = torch.tensor(mix.probability_sup, device=self.device, dtype=torch.float)
+            
+            next_rewards_nf[i] = (1 - prob_sup) * inf_qr + prob_sup * sup_qr
+            next_costs_nf[i] = (1 - prob_sup) * inf_qc + prob_sup * sup_qc
         next_rewards[~terminals] = next_rewards_nf
         next_costs[~terminals] = next_costs_nf
 
@@ -311,7 +318,7 @@ class BudgetedFittedQ(object):
 
     def load_network(self, path=None):
         path = Path(path) if path else Path("policy.pt")
-        self._value_network = torch.load(path, map_location=self.device)
+        self._value_network = torch.load(path, map_location=self.device, weights_only=False)
         return self._value_network
 
     def reset_network(self):

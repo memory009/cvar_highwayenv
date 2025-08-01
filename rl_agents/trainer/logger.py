@@ -35,7 +35,7 @@ logging_config = {
 }
 
 
-def configure(config={}, gym_level=gym.logger.INFO):
+def configure(config={}, gym_level=logging.INFO):
     """
         Configure logging.
 
@@ -51,7 +51,11 @@ def configure(config={}, gym_level=gym.logger.INFO):
                 config = json.load(f)
         Configurable.rec_update(logging_config, config)
     logging.config.dictConfig(logging_config)
-    gym.logger.set_level(gym_level)
+    # Gymnasium no longer has gym.logger.set_level method in newer versions
+    # The gym_level parameter is kept for backward compatibility but not used
+    
+    # Suppress matplotlib font manager debug messages
+    logging.getLogger('matplotlib.font_manager').setLevel(logging.WARNING)
 
 
 def add_file_handler(file_path):

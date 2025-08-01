@@ -156,10 +156,25 @@ class TreePlot(object):
 
         # Figure export
         fig.canvas.draw()
-        data_str = fig.canvas.tostring_rgb()
+        # Fix for matplotlib API change - tostring_rgb() is deprecated
         if writer:
-            data = np.fromstring(data_str, dtype=np.uint8, sep='')
-            data = np.rollaxis(data.reshape(fig.canvas.get_width_height()[::-1] + (3,)), 2, 0)
+            try:
+                # Try new API first (matplotlib >= 3.8)
+                buf = fig.canvas.buffer_rgba()
+                data = np.asarray(buf)[:, :, :3]  # Remove alpha channel to get RGB
+                data = np.rollaxis(data, 2, 0)  # Change from HWC to CHW format
+            except AttributeError:
+                # Fall back to older API
+                try:
+                    data_str = fig.canvas.tostring_rgb()
+                    data = np.fromstring(data_str, dtype=np.uint8, sep='')
+                    data = np.rollaxis(data.reshape(fig.canvas.get_width_height()[::-1] + (3,)), 2, 0)
+                except AttributeError:
+                    # Last resort - use tostring_argb if available
+                    data_str = fig.canvas.tostring_argb()
+                    data = np.fromstring(data_str, dtype=np.uint8, sep='')
+                    data = data.reshape(fig.canvas.get_width_height()[::-1] + (4,))[:, :, 1:4]  # Remove alpha, keep RGB
+                    data = np.rollaxis(data, 2, 0)
             writer.add_image(title, data, epoch)
         if show:
             plt.show()

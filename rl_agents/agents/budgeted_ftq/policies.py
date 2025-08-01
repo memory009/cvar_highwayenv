@@ -30,7 +30,7 @@ class EpsilonGreedyBudgetedPolicy(BudgetedPolicy):
                        np.exp(- self.time / self.config['tau'])
         self.time += 1
 
-        if self.np_random.random_sample() > epsilon:
+        if self.np_random.random() > epsilon:
             return self.pi_greedy.execute(state, beta)
         else:
             return self.pi_random.execute(state, beta)
@@ -45,7 +45,7 @@ class RandomBudgetedPolicy(BudgetedPolicy):
         self.np_random = np_random
 
     def execute(self, state, beta):
-        action_probs = self.np_random.rand(self.n_actions)
+        action_probs = self.np_random.random(self.n_actions)
         action_probs /= np.sum(action_probs)
         budget_probs = sample_simplex(coeff=action_probs, bias=beta, min_x=0, max_x=1, np_random=self.np_random)
         action = self.np_random.choice(a=range(self.n_actions), p=action_probs)
@@ -64,7 +64,7 @@ class PytorchBudgetedFittedPolicy(BudgetedPolicy):
         self.network = network
 
     def load_network(self, network_path):
-        self.network = torch.load(network_path, map_location=self.device)
+        self.network = torch.load(network_path, map_location=self.device, weights_only=False)
 
     def set_network(self, network):
         self.network = copy.deepcopy(network)
